@@ -168,21 +168,34 @@ function getToolResultIdFromBlock(block) {
   return normalizeToolUseId(block?.toolResult?.toolUseId);
 }
 
-function isToolResultOnlyMessage(message) {
-  return (
-    message?.role === "user" &&
-    Array.isArray(message.content) &&
-    message.content.length > 0 &&
-    message.content.every((block) => Boolean(getToolResultIdFromBlock(block)))
-  );
+// Bedrock Converse rejects a conversation whose roles do not strictly alternate
+// ("A conversation must alternate between user and assistant roles"). OpenAI chat
+// histories routinely carry consecutive same-role turns (a tool result followed by a
+// user follow-up, two user messages, an assistant text turn followed by its tool call),
+// so fold each run into one message.
+function isPlaceholderTextBlock(block) {
+  return Object.keys(block || {}).length === 1 && block.text === " ";
 }
 
-function mergeConsecutiveToolResultMessages(messages) {
+function mergeConsecutiveSameRoleMessages(messages) {
   const merged = [];
   for (const message of messages) {
     const previous = merged[merged.length - 1];
-    if (isToolResultOnlyMessage(previous) && isToolResultOnlyMessage(message)) {
-      previous.content.push(...message.content);
+    if (
+      previous &&
+      previous.role === message.role &&
+      Array.isArray(previous.content) &&
+      Array.isArray(message.content)
+    ) {
+      // Drop the " " filler added for an empty turn once real content is joining it,
+      // and keep tool results ahead of other blocks as Converse requires.
+      const blocks = [...previous.content, ...message.content];
+      const real = blocks.filter((block) => !isPlaceholderTextBlock(block));
+      const kept = real.length > 0 ? real : blocks.slice(0, 1);
+      previous.content = [
+        ...kept.filter((block) => getToolResultIdFromBlock(block)),
+        ...kept.filter((block) => !getToolResultIdFromBlock(block)),
+      ];
       continue;
     }
     merged.push(message);
@@ -197,7 +210,7 @@ function ensureNonEmptyContent(message) {
 }
 
 function sanitizeBedrockToolPairs(messages) {
-  const normalized = mergeConsecutiveToolResultMessages(messages);
+  const normalized = mergeConsecutiveSameRoleMessages(messages);
   const validResultCounts = new Map();
 
   for (let i = 0; i < normalized.length; i++) {

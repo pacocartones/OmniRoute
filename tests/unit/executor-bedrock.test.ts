@@ -171,10 +171,13 @@ test("openAIToBedrockConverse allows a tool id to be reused after its result", (
     ],
   });
 
+  // The "again" follow-up joins the user turn that carries the first tool result, so the
+  // roles alternate user, assistant, user, assistant, user.
   assert.equal(payload.messages[1].content[0].toolUse.toolUseId, "call_reuse");
   assert.equal(payload.messages[2].content[0].toolResult.toolUseId, "call_reuse");
-  assert.equal(payload.messages[4].content[0].toolUse.toolUseId, "call_reuse");
-  assert.equal(payload.messages[5].content[0].toolResult.toolUseId, "call_reuse");
+  assert.equal(payload.messages[2].content[1].text, "again");
+  assert.equal(payload.messages[3].content[0].toolUse.toolUseId, "call_reuse");
+  assert.equal(payload.messages[4].content[0].toolResult.toolUseId, "call_reuse");
 });
 
 test("openAIToBedrockConverse skips assistant tool calls that have no result in history", () => {
@@ -205,7 +208,8 @@ test("openAIToBedrockConverse skips assistant tool calls that have no result in 
   const toolUseIds = payload.messages[1].content.map((block) => block.toolUse?.toolUseId);
   assert.deepEqual(toolUseIds, ["call_done"]);
   assert.equal(payload.messages[2].content[0].toolResult.toolUseId, "call_done");
-  assert.equal(payload.messages[3].role, "user");
+  assert.equal(payload.messages[2].content[1].text, "continue");
+  assert.equal(payload.messages.length, 3);
 });
 
 test("openAIToBedrockConverse skips content tool_use blocks without matching results", () => {
@@ -259,7 +263,7 @@ test("openAIToBedrockConverse merges consecutive tool results after multi-tool c
   assert.equal(payload.messages.length, 3);
 });
 
-test("openAIToBedrockConverse removes tool uses whose results are not immediately next", () => {
+test("openAIToBedrockConverse keeps a late tool result with its tool use by joining the interruption turn", () => {
   const payload = openAIToBedrockConverse("anthropic.claude-sonnet-4-6", {
     messages: [
       { role: "user", content: "use a tool" },
@@ -279,8 +283,12 @@ test("openAIToBedrockConverse removes tool uses whose results are not immediatel
     ],
   });
 
-  assert.deepEqual(payload.messages[1].content, [{ text: " " }]);
-  assert.deepEqual(payload.messages[3].content, [{ text: " " }]);
+  // The interruption and the late result now form one user turn, with the tool result first,
+  // so the tool use stays paired with its result in the message right after it.
+  assert.equal(payload.messages.length, 3);
+  assert.equal(payload.messages[1].content[0].toolUse.toolUseId, "call_late");
+  assert.equal(payload.messages[2].content[0].toolResult.toolUseId, "call_late");
+  assert.equal(payload.messages[2].content[1].text, "interruption");
 });
 
 test("BedrockExecutor converts non-streaming Converse output to OpenAI chat completion JSON", async () => {
