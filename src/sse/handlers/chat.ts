@@ -199,6 +199,7 @@ import { registerGrokWebQuotaFetcher } from "@omniroute/open-sse/services/grokQu
 import { registerGenericQuotaFetchers } from "@omniroute/open-sse/services/genericQuotaFetcher.ts";
 import { registerQuotaTrackersBatch } from "@omniroute/open-sse/services/quotaTrackersBatch.ts";
 import {
+  describeCooldownRetry,
   disableCooldownAwareRetry,
   getCooldownAwareRetryDecision,
   resolveCooldownAwareRetrySettings,
@@ -1784,7 +1785,7 @@ async function handleSingleModelChat(
             const waitSec = Math.max(Math.ceil(retryDecision.waitMs / 1000), 0);
             log.info(
               "COOLDOWN_RETRY",
-              `${provider}/${model} all connections cooling down (${retryDecision.retryAfterHuman || `retry in ${waitSec}s`}) — waiting ${waitSec}s before retry ${requestRetryAttempt + 1}/${retrySettings.maxRetries}`
+              `${provider}/${model} all connections cooling down (${retryDecision.retryAfterHuman || `retry in ${waitSec}s`}) — waiting ${waitSec}s before ${describeCooldownRetry(requestRetryAttempt + 1, retrySettings.maxRetries)}`
             );
 
             const completed = await waitForCooldownAwareRetry(retryDecision.waitMs, requestSignal);
@@ -1800,7 +1801,7 @@ async function handleSingleModelChat(
             requestRetryBudgetLeftMs = Math.max(0, requestRetryBudgetLeftMs - retryDecision.waitMs);
             log.info(
               "COOLDOWN_RETRY",
-              `${provider}/${model} cooldown elapsed — restarting request attempt ${requestRetryAttempt + 1}/${retrySettings.maxRetries}`
+              `${provider}/${model} cooldown elapsed — restarting request (${describeCooldownRetry(requestRetryAttempt, retrySettings.maxRetries)})`
             );
             continue requestAttemptLoop;
           }

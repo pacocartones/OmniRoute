@@ -1,0 +1,1 @@
+- **fix(resilience):** the `COOLDOWN_RETRY` restart log line now prints the retry number (`retry 3/3`) instead of the 1-based request attempt, which read `4/3` on the last of three retries; a unit test pins the 1 + `maxRetries` upstream dispatches (#PENDING, closes #15789)

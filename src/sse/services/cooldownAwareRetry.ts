@@ -104,6 +104,17 @@ export function computeClosestRetryAfter(retryAfter: unknown): {
   };
 }
 
+/**
+ * Progress label for the COOLDOWN_RETRY log lines: `retry <n>/<max>`, where n is
+ * the 1-based retry number and max is `maxRetries`. Both lines of one retry (the
+ * wait and the restart) must print the same n — the restart line used to print
+ * the 1-based request attempt instead, which reads 4/3 on the last of 3 retries
+ * (#15789). The number of upstream dispatches is 1 + maxRetries either way.
+ */
+export function describeCooldownRetry(retryNumber: number, maxRetries: number): string {
+  return `retry ${retryNumber}/${maxRetries}`;
+}
+
 export function getCooldownAwareRetryDecision({
   retryAfter,
   settings,
