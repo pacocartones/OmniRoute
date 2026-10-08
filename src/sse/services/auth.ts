@@ -5,7 +5,7 @@ import { extractGoogApiKeyHeader } from "./googApiKeyAuth.ts";
 import { describeUpstreamFailure } from "@/shared/utils/upstreamError";
 import { buildAllExpiredCredentials } from "./authExpiredCredentials.ts";
 import { pickExpiryFirstConnection } from "./expiryFirstAccountSelection.ts";
-import { isModelScopedFailure, isQuotaExhaustedSignal } from "./modelScopedQuotaFailure.ts"; // #13548
+import { isModelScopedFailure, modelScopedFailureReason } from "./modelScopedQuotaFailure.ts"; // #13548
 import {
   getCachedRawProviderConnections,
   getCachedProviderNodes,
@@ -3083,16 +3083,9 @@ export async function markAccountUnavailable(
       provider &&
       provider !== "codex" &&
       model &&
-      isModelScopedFailure(status, isNvidiaModelGone, fallbackResult)
+      isModelScopedFailure(status, isNvidiaModelGone, fallbackResult, errorText)
     ) {
-      const reason =
-        status === 404 || isNvidiaModelGone
-          ? "not_found"
-          : isQuotaExhaustedSignal(fallbackResult)
-            ? "quota_exhausted"
-            : status === 429
-              ? "rate_limited"
-              : "server_error";
+      const reason = modelScopedFailureReason(status, isNvidiaModelGone, fallbackResult);
 
       // #5976: a bare 500 is intermittent and NOT model-specific — skip
       // lockout/cooldown ONLY for the exact 500 (the contract its own tests pin:

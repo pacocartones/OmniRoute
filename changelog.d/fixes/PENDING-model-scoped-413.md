@@ -1,0 +1,1 @@
+- **fix(resilience):** a `413` that names the model it is too large for (Groq `Request too large for model … on tokens per minute`) now locks only that model, so a combo reaches the other models on the same connection instead of cooling the whole connection (#PENDING, part of #15788)

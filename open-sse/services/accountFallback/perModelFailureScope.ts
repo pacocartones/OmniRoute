@@ -25,6 +25,20 @@ export function isModelNotFound404(status: number | undefined, errorText: unknow
   return MODEL_NOT_FOUND_404_REGEX.test(text);
 }
 
+// Groq: "Request too large for model `<id>` in organization … on tokens per minute".
+const MODEL_SCOPED_413_REGEX = /too large for model\b/i;
+
+/**
+ * #15788: a 413 whose body names the MODEL it is too large for is a limit of that
+ * model's tier (Groq TPM), not of the connection — another model on the same key
+ * would have served the request. A bare 413 keeps the connection-wide behaviour.
+ */
+export function isModelScoped413(status: number | undefined, errorText: unknown): boolean {
+  if (status !== 413) return false;
+  const text = typeof errorText === "string" ? errorText : JSON.stringify(errorText ?? "");
+  return MODEL_SCOPED_413_REGEX.test(text);
+}
+
 /**
  * @param status - When 429, only per-model *quota* providers qualify. Omit for
  *   the non-quota question (404/5xx), which also includes Claude.
@@ -36,7 +50,7 @@ export function hasPerModelFailureScope(
   status?: number,
   errorText?: unknown
 ): boolean {
-  if (isModelNotFound404(status, errorText)) return true;
+  if (isModelNotFound404(status, errorText) || isModelScoped413(status, errorText)) return true;
   if (status === 429) return hasPerModelQuota(provider, model, connectionPassthroughModels);
   if (hasPerModelQuota(provider, model, connectionPassthroughModels)) return true;
   if (typeof connectionPassthroughModels === "boolean") return connectionPassthroughModels;

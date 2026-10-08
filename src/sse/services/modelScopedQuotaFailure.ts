@@ -1,4 +1,5 @@
 import { RateLimitReason } from "@omniroute/open-sse/config/constants.ts";
+import { isModelScoped413 } from "@omniroute/open-sse/services/accountFallback/perModelFailureScope.ts";
 
 type FallbackSignal = { permanent?: boolean; reason?: unknown; creditsExhausted?: boolean };
 
@@ -19,13 +20,30 @@ export function isQuotaExhaustedSignal(fallbackResult: FallbackSignal): boolean 
 export function isModelScopedFailure(
   status: number,
   isNvidiaModelGone: boolean,
-  fallbackResult: FallbackSignal
+  fallbackResult: FallbackSignal,
+  errorText?: unknown
 ): boolean {
   if (status === 404 || isNvidiaModelGone || status === 429 || status >= 500) return true;
+  // #15788: "Request too large for model X" is that model's tier limit.
+  if (isModelScoped413(status, errorText)) return true;
   return (
     !fallbackResult.permanent &&
     status !== 402 &&
     (isQuotaExhaustedSignal(fallbackResult) ||
       fallbackResult.reason === RateLimitReason.RATE_LIMIT_EXCEEDED)
   );
+}
+
+/** Lockout reason for a model-scoped failure (the branch isModelScopedFailure admits). */
+export function modelScopedFailureReason(
+  status: number,
+  isNvidiaModelGone: boolean,
+  fallbackResult: FallbackSignal
+): string {
+  if (status === 404 || isNvidiaModelGone) return "not_found";
+  if (isQuotaExhaustedSignal(fallbackResult)) return "quota_exhausted";
+  if (status === 429) return "rate_limited";
+  // #15788: a model-named 413 is that model's tier limit (Groq TPM).
+  if (status === 413) return "model_capacity";
+  return "server_error";
 }
