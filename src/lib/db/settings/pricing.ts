@@ -4,7 +4,7 @@
 
 import { getDbInstance } from "../core";
 import { backupDbFile } from "../backup";
-import { getCachedPricing, invalidateDbCache } from "../readCache";
+import { getCachedPricing, getModelCatalogCacheVersion, invalidateDbCache } from "../readCache";
 import { PROVIDER_ID_TO_ALIAS } from "@omniroute/open-sse/config/providerModels.ts";
 import { type JsonRecord, toRecord } from "./shared";
 
@@ -128,6 +128,23 @@ export async function getPricingWithSources(): Promise<{
     pricing: mergePricingLayers([layers.defaults, layers.litellm, layers.modelsDev, layers.user]),
     sourceMap: buildPricingSourceMap(layers),
   };
+}
+
+// #15528: the user layer (`pricing` namespace) for the /v1/models catalog, which
+// resolves pricing synchronously per entry. Memoized like getModelsDevPricing() and
+// getSyncedPricing(): every pricing write goes through touchPricing() →
+// invalidateDbCache("pricing"), which bumps the model-catalog cache version.
+let userPricingMemo: PricingByProvider | null = null;
+let userPricingMemoVersion = -1;
+
+export function getUserPricingOverrides(): PricingByProvider {
+  const currentVersion = getModelCatalogCacheVersion();
+  if (userPricingMemo !== null && userPricingMemoVersion === currentVersion) {
+    return userPricingMemo;
+  }
+  userPricingMemo = readPricingNamespace(getDbInstance(), "pricing");
+  userPricingMemoVersion = currentVersion;
+  return userPricingMemo;
 }
 
 export async function getPricingForModel(provider: string, model: string) {

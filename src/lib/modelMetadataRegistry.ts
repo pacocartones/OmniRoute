@@ -24,6 +24,7 @@ import {
   type PricingByProvider,
 } from "@/lib/modelsDevSync";
 import { getSyncedPricing } from "@/lib/pricingSync";
+import { getUserPricingOverrides } from "@/lib/db/settings/pricing";
 import { getPricingForModel as getDefaultPricingForModel } from "@/shared/constants/pricing";
 import {
   CANONICAL_EFFORT_VALUES,
@@ -40,6 +41,8 @@ type JsonRecord = Record<string, unknown>;
 
 export interface CatalogEnrichmentSnapshot {
   modelsDevPricing: PricingByProvider | null;
+  /** #15528: build-local load of the user pricing layer (`pricing` namespace). */
+  userPricing?: PricingByProvider | null;
   providerNodeIdsByPrefix?: Readonly<Record<string, string>>;
   /** #9147: build-local bulk load of synced capabilities + token/context overrides
    * so per-entry enrichment never hits SQLite again (see catalogResponse.ts). */
@@ -351,44 +354,83 @@ export function findInsensitive<T>(
   return index.get(key.toLowerCase()) as T | undefined;
 }
 
-function resolveCatalogPricing(
-  provider: string | null,
-  model: string | null,
+/**
+ * Build-local load of the pricing layers the catalog reads per entry, so a
+ * /v1/models build reads each namespace once. Each layer is optional: a failed
+ * read falls through to the lower layers and the hardcoded defaults.
+ */
+export function loadCatalogPricingLayers(): Pick<
+  CatalogEnrichmentSnapshot,
+  "modelsDevPricing" | "userPricing"
+> {
+  let modelsDevPricing: PricingByProvider | null = null;
+  let userPricing: PricingByProvider | null = null;
+  try {
+    modelsDevPricing = getModelsDevPricing();
+  } catch {
+    // Pricing lookup is optional; hardcoded defaults still enrich the response.
+  }
+  try {
+    userPricing = getUserPricingOverrides() as unknown as PricingByProvider;
+  } catch {
+    // #15528: the user layer is optional too; the lower layers still apply.
+  }
+  return { modelsDevPricing, userPricing };
+}
+
+type PricingLayer = Record<string, Record<string, Record<string, number>>>;
+
+function findLayerModelPricing(
+  layer: PricingLayer,
+  provider: string,
+  model: string
+): Record<string, number> | undefined {
+  const providerPricing =
+    findInsensitive(layer, provider) || findInsensitive(layer, provider.replace(/-cn$/, ""));
+  if (!providerPricing) return undefined;
+  const modelPricing =
+    findInsensitive(providerPricing, model) ||
+    findInsensitive(providerPricing, model.replace(/\./g, "-")) ||
+    findInsensitive(providerPricing, model.includes("/") ? model.split("/").pop() || model : model);
+  return modelPricing && typeof modelPricing === "object" ? modelPricing : undefined;
+}
+
+const CATALOG_PRICING_FIELDS = ["input", "output", "cached", "cache_creation"] as const;
+
+function pickNumericPricingFields(
+  modelPricing: Record<string, unknown> | undefined
+): Record<string, number> | null {
+  if (!modelPricing) return null;
+  const pricing: Record<string, number> = {};
+  for (const field of CATALOG_PRICING_FIELDS) {
+    const value = modelPricing[field];
+    if (typeof value === "number") pricing[field] = value;
+  }
+  return Object.keys(pricing).length > 0 ? pricing : null;
+}
+
+/** Catalog pricing needs at least an input or an output rate to be published. */
+function pickCatalogPricingFields(
+  modelPricing: Record<string, unknown> | undefined
+): Record<string, number> | null {
+  const pricing = pickNumericPricingFields(modelPricing);
+  return pricing && (typeof pricing.input === "number" || typeof pricing.output === "number")
+    ? pricing
+    : null;
+}
+
+function resolveSyncedCatalogPricing(
+  provider: string,
+  model: string,
   snapshot?: CatalogEnrichmentSnapshot
 ): Record<string, number> | null {
-  if (!provider || !model) return null;
-
   // Prefer models.dev synced pricing when present; fall back to hardcoded defaults.
   try {
     const modelsDev = (
       snapshot ? snapshot.modelsDevPricing || {} : getModelsDevPricing()
-    ) as Record<string, Record<string, Record<string, number>>>;
-    const providerPricing =
-      findInsensitive(modelsDev, provider) ||
-      findInsensitive(modelsDev, provider.replace(/-cn$/, ""));
-    if (providerPricing) {
-      const modelPricing =
-        findInsensitive(providerPricing, model) ||
-        findInsensitive(providerPricing, model.replace(/\./g, "-")) ||
-        findInsensitive(
-          providerPricing,
-          model.includes("/") ? model.split("/").pop() || model : model
-        );
-      if (modelPricing && typeof modelPricing === "object") {
-        const input = modelPricing.input;
-        const output = modelPricing.output;
-        if (typeof input === "number" || typeof output === "number") {
-          const pricing: Record<string, number> = {};
-          if (typeof input === "number") pricing.input = input;
-          if (typeof output === "number") pricing.output = output;
-          if (typeof modelPricing.cached === "number") pricing.cached = modelPricing.cached;
-          if (typeof modelPricing.cache_creation === "number") {
-            pricing.cache_creation = modelPricing.cache_creation;
-          }
-          return pricing;
-        }
-      }
-    }
+    ) as PricingLayer;
+    const pricing = pickCatalogPricingFields(findLayerModelPricing(modelsDev, provider, model));
+    if (pricing) return pricing;
   } catch {
     // pricing lookup must never break catalog assembly
   }
@@ -398,35 +440,9 @@ function resolveCatalogPricing(
   // Consulted only when models.dev returned nothing, matching the order
   // already implemented in db/settings/pricing.ts::getPricing().
   try {
-    const litellm = getSyncedPricing() as unknown as Record<
-      string,
-      Record<string, Record<string, number>>
-    >;
-    const providerPricing =
-      findInsensitive(litellm, provider) || findInsensitive(litellm, provider.replace(/-cn$/, ""));
-    if (providerPricing) {
-      const modelPricing =
-        findInsensitive(providerPricing, model) ||
-        findInsensitive(providerPricing, model.replace(/\./g, "-")) ||
-        findInsensitive(
-          providerPricing,
-          model.includes("/") ? model.split("/").pop() || model : model
-        );
-      if (modelPricing && typeof modelPricing === "object") {
-        const input = modelPricing.input;
-        const output = modelPricing.output;
-        if (typeof input === "number" || typeof output === "number") {
-          const pricing: Record<string, number> = {};
-          if (typeof input === "number") pricing.input = input;
-          if (typeof output === "number") pricing.output = output;
-          if (typeof modelPricing.cached === "number") pricing.cached = modelPricing.cached;
-          if (typeof modelPricing.cache_creation === "number") {
-            pricing.cache_creation = modelPricing.cache_creation;
-          }
-          return pricing;
-        }
-      }
-    }
+    const litellm = getSyncedPricing() as unknown as PricingLayer;
+    const pricing = pickCatalogPricingFields(findLayerModelPricing(litellm, provider, model));
+    if (pricing) return pricing;
   } catch {
     // pricing lookup must never break catalog assembly
   }
@@ -440,6 +456,33 @@ function resolveCatalogPricing(
     // ignore
   }
   return null;
+}
+
+function resolveCatalogPricing(
+  provider: string | null,
+  model: string | null,
+  snapshot?: CatalogEnrichmentSnapshot
+): Record<string, number> | null {
+  if (!provider || !model) return null;
+
+  const synced = resolveSyncedCatalogPricing(provider, model, snapshot);
+
+  // #15528: the user layer (PATCH /api/pricing) sits on top, merged field by field
+  // over the lower layers exactly as db/settings/pricing.ts::getPricing() does, so
+  // GET /v1/models advertises the same rate /api/pricing and the cost header use.
+  let userPricing: Record<string, number> | undefined;
+  try {
+    const user = (snapshot?.userPricing !== undefined
+      ? snapshot.userPricing || {}
+      : getUserPricingOverrides()) as unknown as PricingLayer;
+    userPricing = findLayerModelPricing(user, provider, model);
+  } catch {
+    // pricing lookup must never break catalog assembly
+  }
+  const override = pickNumericPricingFields(userPricing);
+  if (!override) return synced;
+  const merged = { ...(synced || {}), ...override };
+  return typeof merged.input === "number" || typeof merged.output === "number" ? merged : synced;
 }
 
 export function enrichCatalogModelEntry<T extends JsonRecord>(

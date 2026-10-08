@@ -67,11 +67,11 @@ import {
   INTERNAL_PROXY_ERROR,
   getCanonicalModelMetadata,
   getCatalogDiagnosticsHeaders,
+  loadCatalogPricingLayers,
   type CatalogEnrichmentSnapshot,
 } from "@/lib/modelMetadataRegistry";
 import { createModelCapabilityResolutionSnapshot } from "@/lib/modelCapabilityResolutionSnapshot";
 import {
-  getModelsDevPricing,
   getSyncedCapability,
   peekCachedReasoningEfforts,
   upsertSyncedCapabilities,
@@ -2080,14 +2080,8 @@ async function buildUnifiedModelsResponseCore(
 
     let enrichmentSnapshot: CatalogEnrichmentSnapshot | undefined;
     if (finalModels.some((model) => model.owned_by !== "combo")) {
-      let modelsDevPricing: ReturnType<typeof getModelsDevPricing> | null = null;
-      try {
-        modelsDevPricing = getModelsDevPricing();
-      } catch {
-        // Pricing lookup is optional; hardcoded defaults still enrich the response.
-      }
       enrichmentSnapshot = {
-        modelsDevPricing,
+        ...loadCatalogPricingLayers(),
         capabilityResolutionSnapshot,
         providerNodeIdsByPrefix: providerNodeIdByPrefix,
       };

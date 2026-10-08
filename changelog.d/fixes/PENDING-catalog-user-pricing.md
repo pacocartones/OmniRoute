@@ -1,0 +1,1 @@
+- **fix(api):** `GET /v1/models` now applies the user pricing layer (`PATCH /api/pricing`) on top of models.dev, LiteLLM and the defaults, so the catalog advertises the same rate as `/api/pricing` and `X-OmniRoute-Response-Cost` (#PENDING, closes #15528 — thanks @Quintasan)
