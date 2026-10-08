@@ -1,0 +1,1 @@
+- **test(executors):** a ratchet guard freezes the 59 executor `execute()` overrides that bypass the reactive 400 recovery chain and requires any new override to call `super.execute()` or `applyReasoningEffortRecovery()`, a follow-up to #14629 / #14774 ([#PENDING](https://github.com/diegosouzapw/OmniRoute/pull/PENDING)) — thanks @pacocartones
