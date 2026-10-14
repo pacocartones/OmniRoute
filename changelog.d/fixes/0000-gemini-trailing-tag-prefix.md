@@ -1,0 +1,1 @@
+- **fix(translator):** in the Gemini→OpenAI stream, a reply whose final text ends in `<` or a partial reasoning-tag prefix (`<thi`) lost those characters: they were held back as a possible `<think>` opener and never released when the stream finished. They are now emitted as content at finish.

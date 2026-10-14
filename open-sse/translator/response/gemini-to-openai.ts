@@ -696,6 +696,10 @@ export function geminiToOpenAIResponse(chunk, state) {
   if (candidate.finishReason) {
     if (parseTextualReasoningTags) {
       flushOpenTextualReasoning(state, results);
+      // A trailing '<' or '<thi' held back as a possible reasoning-tag prefix is ordinary text
+      // once the stream ends: nothing can complete the tag any more.
+      emitTextDelta(state.textualReasoningTagBuffer || "", state, results, "content");
+      state.textualReasoningTagBuffer = undefined;
     }
 
     if (state.textualToolCallBuffer) {
