@@ -1,0 +1,1 @@
+- **fix(translator):** tool calls recovered from assistant text (`<invoke>`, `<tool_call>`, `TOOL_CALL`) in the OpenAI→Claude and Gemini→Claude streams were given `toolu_xml_<ms>_<n>` ids whose counter restarts at 0 on every chunk, so two chunks handled in the same millisecond emitted two `tool_use` blocks with the same id. They now get a random id.

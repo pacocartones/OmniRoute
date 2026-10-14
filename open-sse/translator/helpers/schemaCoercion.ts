@@ -461,6 +461,15 @@ export function sanitizeToolId(id: string | undefined): string {
   return sanitized || `tool_${crypto.randomUUID().replace(/-/g, "_")}`;
 }
 
+/**
+ * Id for a tool call recovered from assistant text (`<invoke>`, `<tool_call>`, `TOOL_CALL`).
+ * `Date.now()` plus a per-chunk index is not unique: the index restarts at 0 on every chunk,
+ * so two chunks handled in the same millisecond produced the same id.
+ */
+export function newTextToolCallId(prefix: "toolu_xml" | "toolu_txt"): string {
+  return `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`;
+}
+
 export function injectEmptyReasoningContentForToolCalls(
   messages: unknown,
   provider: unknown,

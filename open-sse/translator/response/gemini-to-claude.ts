@@ -7,6 +7,7 @@ import {
   storeGeminiThoughtSignature,
 } from "../../services/geminiThoughtSignatureStore.ts";
 import { splitMarkdownBoundary } from "../helpers/markdownBoundary.ts";
+import { newTextToolCallId } from "../helpers/schemaCoercion.ts";
 
 function normalizeToolName(name: string, toolNameMap?: Map<string, string> | null): string {
   return restoreClaudeToolName(name, toolNameMap);
@@ -52,7 +53,7 @@ function extractXmlInvokeBlocks(
       const paramRegex = /<parameter\s+name="([^"]*)"[^>]*>([\s\S]*?)<\/parameter>/g;
       let pm;
       while ((pm = paramRegex.exec(innerXml)) !== null) { args[pm[1]] = pm[2].trim(); }
-      toolCalls.push({ id: `toolu_xml_${Date.now()}_${toolCalls.length}`, name: startMatch[1], args });
+      toolCalls.push({ id: newTextToolCallId("toolu_xml"), name: startMatch[1], args });
       remaining = rest.slice(fullLength);
     } else if (first.type === "tool_call_tag") {
       const endMatch = rest.match(/<\/tool_call>/);
@@ -64,7 +65,7 @@ function extractXmlInvokeBlocks(
         const name = (parsed.name || parsed.tool_name || "") as string;
         const rawArgs = parsed.arguments || parsed.args || parsed.parameters || {};
         const args: Record<string, unknown> = typeof rawArgs === "string" ? JSON.parse(rawArgs) : (rawArgs as Record<string, unknown>);
-        if (name) { toolCalls.push({ id: `toolu_txt_${Date.now()}_${toolCalls.length}`, name, args }); }
+        if (name) { toolCalls.push({ id: newTextToolCallId("toolu_txt"), name, args }); }
       } catch { cleaned += rest.slice(0, fullLength); }
       remaining = rest.slice(fullLength);
     } else {
@@ -87,7 +88,7 @@ function extractXmlInvokeBlocks(
       const fullLength = startMatch[0].length + jsonEndIndex;
       try {
         const args = JSON.parse(jsonStr) as Record<string, unknown>;
-        toolCalls.push({ id: `toolu_txt_${Date.now()}_${toolCalls.length}`, name: toolName, args });
+        toolCalls.push({ id: newTextToolCallId("toolu_txt"), name: toolName, args });
       } catch { cleaned += rest.slice(0, fullLength); }
       remaining = rest.slice(fullLength);
     }

@@ -9,7 +9,7 @@ import {
   stripInternalReasoningPlaceholder,
 } from "../../utils/reasoningPlaceholder.ts";
 import { REVERSE_MAP, restoreClaudeToolName } from "../../services/claudeCodeToolRemapper.ts";
-import { sanitizeToolId } from "../helpers/schemaCoercion.ts";
+import { newTextToolCallId, sanitizeToolId } from "../helpers/schemaCoercion.ts";
 import { splitMarkdownBoundary } from "../helpers/markdownBoundary.ts";
 import { hasDsmlToolCalls, parseDsmlToolCalls } from "../../utils/dsmlToolCalls.ts";
 import {
@@ -100,7 +100,7 @@ function extractXmlInvokeBlocks(
         args[pm[1]] = pm[2].trim();
       }
       toolCalls.push({
-        id: `toolu_xml_${Date.now()}_${toolCalls.length}`,
+        id: newTextToolCallId("toolu_xml"),
         name: startMatch[1],
         args,
       });
@@ -120,7 +120,7 @@ function extractXmlInvokeBlocks(
         const args: Record<string, string> =
           typeof rawArgs === "string" ? JSON.parse(rawArgs) : (rawArgs as Record<string, string>);
         if (name) {
-          toolCalls.push({ id: `toolu_txt_${Date.now()}_${toolCalls.length}`, name, args });
+          toolCalls.push({ id: newTextToolCallId("toolu_txt"), name, args });
         }
       } catch {
         cleaned += rest.slice(0, fullLength);
@@ -167,7 +167,7 @@ function extractXmlInvokeBlocks(
       const fullLength = startMatch[0].length + jsonEndIndex;
       try {
         const args = JSON.parse(jsonStr) as Record<string, string>;
-        toolCalls.push({ id: `toolu_txt_${Date.now()}_${toolCalls.length}`, name: toolName, args });
+        toolCalls.push({ id: newTextToolCallId("toolu_txt"), name: toolName, args });
       } catch {
         cleaned += rest.slice(0, fullLength);
       }
