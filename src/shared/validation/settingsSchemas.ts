@@ -199,7 +199,10 @@ export const updateSettingsSchema = z.object({
     .array(z.enum(SIDEBAR_SECTIONS.map((s) => s.id) as [string, ...string[]]))
     .optional(),
   sidebarItemOrder: z.record(z.string(), z.array(z.string().max(100))).optional(),
-  sidebarActivePreset: z.enum(["all", "minimal", "developer", "admin"]).nullable().optional(),
+  sidebarActivePreset: z
+    .enum(["all", "essentials", "minimal", "developer", "admin"])
+    .nullable()
+    .optional(),
   comboConfigMode: z.enum(COMBO_CONFIG_MODES).optional(),
   codexServiceTier: z
     .object({
@@ -259,6 +262,48 @@ export const updateSettingsSchema = z.object({
       })
     )
     .optional(),
+  /**
+   * Operator-declared per-provider error rules. Consulted BEFORE the built-in
+   * `providerRuleRegistry` in open-sse/config/providerErrorRules.ts so an
+   * operator can add a scope/cooldown/reason override for a provider without
+   * editing the catalog. Matches are plain case-insensitive SUBSTRINGS of the
+   * error body (never RegExp) to keep the classification hot path ReDoS-safe.
+   * Bounded to 50 rules total so a misconfigured setting cannot blow up the
+   * matcher.
+   */
+  providerErrorRules: z
+    .record(
+      z.string().trim().min(1).max(100),
+      z.array(
+        z.object({
+          status: z.number().int().min(100).max(599),
+          match: z.string().min(1).max(200),
+          scope: z.enum(["model", "provider", "connection"]),
+          reason: z
+            .enum([
+              "auth_error",
+              "quota_exhausted",
+              "rate_limit_exceeded",
+              "model_capacity",
+              "server_error",
+              "unknown",
+            ])
+            .optional(),
+          cooldownMs: z.number().int().min(0).max(86_400_000).optional(),
+        })
+      )
+    )
+    .optional()
+    .superRefine((value, ctx) => {
+      if (!value) return;
+      const total = Object.values(value).reduce((n, rules) => n + rules.length, 0);
+      if (total > 50) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `providerErrorRules: at most 50 rules total, got ${total}`,
+        });
+      }
+    }),
   // #6168: global session-stickiness opt-out (per-combo config overrides this).
   disableSessionStickiness: z.boolean().optional(),
   /** Keep eligible combo targets close to the provider-side prompt cache. */
@@ -378,6 +423,7 @@ export const updateSettingsSchema = z.object({
   modalityBridgeAudioTimeout: z.number().int().min(1000).max(300000).optional(),
   modalityBridgeAudioMaxClips: z.number().int().min(1).max(10).optional(),
   modalityBridgeVideoEnabled: z.boolean().optional(),
+  modalityBridgeVideoAnalysisMode: z.enum(["full", "focused"]).optional(),
   modalityBridgeVideoModel: z.string().max(200).optional(),
   modalityBridgeVideoFrameCount: z.number().int().min(1).max(16).optional(),
   modalityBridgeVideoSamplingPolicy: z.enum(["uniform", "scene_aware", "segment_aware"]).optional(),

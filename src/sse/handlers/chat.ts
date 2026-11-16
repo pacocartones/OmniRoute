@@ -1851,7 +1851,7 @@ async function handleSingleModelChat(
             modelPinned: runtimeOptions?.modelPinned ?? false,
             routingComboId: runtimeOptions?.routingComboId ?? null,
             sessionAffinityKey: runtimeOptions.sessionAffinityKey ?? null,
-            reasoningTransportFallback: runtimeOptions.reasoningTransportFallback ?? "skip",
+            reasoningTransportFallback: runtimeOptions.reasoningTransportFallback ?? "drop",
             managedLease: runtimeOptions.managedLease ?? null,
           },
           runtimeOptions
@@ -2240,6 +2240,7 @@ async function handleSingleModelChat(
       if (
         !runtimeOptions.emergencyFallbackTried &&
         !comboName &&
+        !forceLiveComboTest &&
         shouldRetrySameAccountTransport({
           status: result.status,
           errorText: errorStr,
@@ -2293,7 +2294,14 @@ async function handleSingleModelChat(
             }
           );
 
-      if (shouldFallback) {
+      // An explicit pin (combo step `connectionId` / `x-omniroute-connection`) is an
+      // operator instruction, not a suggestion: the account cooldown above is still
+      // recorded, but selection must NOT silently rotate to a sibling account of the
+      // same provider. Pinned steps fall through to combo orchestration, which moves
+      // to the next target — with ITS own pin. Same rule the antigravity
+      // stream-readiness / pre-response-timeout and account-semaphore paths above
+      // already apply.
+      if (shouldFallback && !hasForcedConnection) {
         if (Number.isFinite(cooldownMs) && cooldownMs > 0) {
           lastCooldownMs = cooldownMs;
           requestRetryLastCooldownMs = cooldownMs;

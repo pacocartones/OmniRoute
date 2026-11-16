@@ -14,6 +14,7 @@ import { AUDIO_ONLY_PROVIDERS } from "./providers/audio";
 import { UPSTREAM_PROXY_PROVIDERS } from "./providers/upstream-proxy";
 import { CLOUD_AGENT_PROVIDERS } from "./providers/cloud-agent";
 import { SYSTEM_PROVIDERS } from "./providers/system";
+import { validateProviders } from "../validation/providerSchema";
 
 export const FREE_PROVIDERS = {};
 
@@ -74,6 +75,7 @@ export function getProviderConnectionFamilyIds(providerId: unknown): readonly st
 
 // Web / Cookie Providers
 
+
 // API Key Providers
 
 // Sub-categories within APIKEY_PROVIDERS (used by dashboard and catalog views).
@@ -106,7 +108,6 @@ export const AGGREGATOR_PROVIDER_IDS = new Set([
   "empower",
   "poe",
   "chutes",
-  "hackclub",
   "freetheai",
   "g4f-groq",
   "g4f-gemini",
@@ -142,6 +143,8 @@ export const AGGREGATOR_PROVIDER_IDS = new Set([
   "void-ai",
   "helixmind",
   "tabitoken",
+  "logfare",
+
 ]);
 
 export const ENTERPRISE_CLOUD_PROVIDER_IDS = new Set([
@@ -237,9 +240,7 @@ export function isSelfHostedChatProvider(providerId: unknown): boolean {
 const EXPLICIT_OPTIONAL_APIKEY_PROVIDER_IDS = new Set([
   "searxng-search",
   "firecrawl",
-  "pollinations",
   "copilot-web",
-  "hackclub",
   "g4f-groq",
   "g4f-gemini",
   "g4f-pollinations",
@@ -309,10 +310,27 @@ const _PROVIDER_SECTIONS = [
   SYSTEM_PROVIDERS,
 ] as const;
 
+let _validated = false;
+
+function ensureProvidersValidated() {
+  if (_validated) return;
+  validateProviders(NOAUTH_PROVIDERS, "NOAUTH_PROVIDERS");
+  validateProviders(OAUTH_PROVIDERS, "OAUTH_PROVIDERS");
+  validateProviders(APIKEY_PROVIDERS, "APIKEY_PROVIDERS");
+  validateProviders(WEB_COOKIE_PROVIDERS, "WEB_COOKIE_PROVIDERS");
+  validateProviders(LOCAL_PROVIDERS, "LOCAL_PROVIDERS");
+  validateProviders(SEARCH_PROVIDERS, "SEARCH_PROVIDERS");
+  validateProviders(AUDIO_ONLY_PROVIDERS, "AUDIO_ONLY_PROVIDERS");
+  validateProviders(UPSTREAM_PROXY_PROVIDERS, "UPSTREAM_PROXY_PROVIDERS");
+  validateProviders(CLOUD_AGENT_PROVIDERS, "CLOUD_AGENT_PROVIDERS");
+  _validated = true;
+}
+
 let _aiProviders: Record<string, any> | null = null;
 
 function getOrCreateAiProviders(): Record<string, any> {
   if (!_aiProviders) {
+    ensureProvidersValidated();
     _aiProviders = {};
     for (const section of _PROVIDER_SECTIONS) {
       Object.assign(_aiProviders, section);
@@ -507,6 +525,9 @@ export const USAGE_SUPPORTED_PROVIDERS = [
   "grok-cli",
   // Firecrawl team credits (GET /v2/team/credit-usage)
   "firecrawl",
+  // Volcano Ark Plan subscriptions (agent-plan / coding-plan)
+  "volcengine-agent-plan",
+  "volcengine-coding-plan",
   // Command Code credits + 5h/weekly rolling windows
   "command-code",
   "conol-web",
@@ -519,7 +540,8 @@ export const USAGE_SUPPORTED_PROVIDERS = [
   "agentrouter",
 ];
 
-// ── Zod validation at module load (Phase 7.2) ──
+// ── Zod validation, lazily on first AI_PROVIDERS access (perf: skips the walk
+// for processes that never touch AI_PROVIDERS, e.g. short-lived CLI commands) ──
 
 // Re-export the extracted data catalogs so external importers of providers.ts are unchanged.
 export {
@@ -534,15 +556,3 @@ export {
   CLOUD_AGENT_PROVIDERS,
   SYSTEM_PROVIDERS,
 };
-
-import { validateProviders } from "../validation/providerSchema";
-
-validateProviders(NOAUTH_PROVIDERS, "NOAUTH_PROVIDERS");
-validateProviders(OAUTH_PROVIDERS, "OAUTH_PROVIDERS");
-validateProviders(APIKEY_PROVIDERS, "APIKEY_PROVIDERS");
-validateProviders(WEB_COOKIE_PROVIDERS, "WEB_COOKIE_PROVIDERS");
-validateProviders(LOCAL_PROVIDERS, "LOCAL_PROVIDERS");
-validateProviders(SEARCH_PROVIDERS, "SEARCH_PROVIDERS");
-validateProviders(AUDIO_ONLY_PROVIDERS, "AUDIO_ONLY_PROVIDERS");
-validateProviders(UPSTREAM_PROXY_PROVIDERS, "UPSTREAM_PROXY_PROVIDERS");
-validateProviders(CLOUD_AGENT_PROVIDERS, "CLOUD_AGENT_PROVIDERS");

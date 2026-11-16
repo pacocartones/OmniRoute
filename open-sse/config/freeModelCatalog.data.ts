@@ -16,7 +16,7 @@ import type { FreeModelBudget } from "./freeModelCatalog.ts";
  * rewrites file timestamps on every deploy, which would report a months-old
  * catalog as "updated today". Bump this whenever the entries below change.
  */
-export const FREE_CATALOG_CURATED_AT = "2026-08-18";
+export const FREE_CATALOG_CURATED_AT = "2026-08-20";
 
 export const FREE_MODEL_BUDGETS: FreeModelBudget[] = [
   { provider: "chatgpt-web", modelId: "gpt-5.6-luna-free", displayName: "GPT-5.6 Luna (Free)", monthlyTokens: 0, creditTokens: 0, freeType: "recurring-uncapped", poolKey: "chatgpt-web-free", tos: "caution" },
@@ -194,9 +194,6 @@ export const FREE_MODEL_BUDGETS: FreeModelBudget[] = [
   { provider: "groq", modelId: "openai/gpt-oss-120b", displayName: "GPT-OSS 120B", monthlyTokens: 15000000, creditTokens: 0, freeType: "recurring-daily", poolKey: "groq", tos: "caution", hardStopGuaranteed: true },
   { provider: "groq", modelId: "openai/gpt-oss-20b", displayName: "GPT-OSS 20B", monthlyTokens: 15000000, creditTokens: 0, freeType: "recurring-daily", poolKey: "groq", tos: "caution", hardStopGuaranteed: true },
   { provider: "groq", modelId: "qwen/qwen3-32b", displayName: "Qwen3 32B", monthlyTokens: 15000000, creditTokens: 0, freeType: "recurring-daily", poolKey: "groq", tos: "caution", hardStopGuaranteed: true },
-  { provider: "hackclub", modelId: "meta-llama/llama-3.3-70b-instruct", displayName: "Llama 3.3 70B", monthlyTokens: 0, creditTokens: 0, freeType: "keyless", poolKey: "hackclub", tos: "caution" },
-  { provider: "hackclub", modelId: "mistralai/mistral-7b-instruct", displayName: "Mistral 7B", monthlyTokens: 0, creditTokens: 0, freeType: "keyless", poolKey: "hackclub", tos: "caution" },
-  { provider: "hackclub", modelId: "deepseek-ai/deepseek-coder-33b", displayName: "DeepSeek Coder 33B", monthlyTokens: 0, creditTokens: 0, freeType: "keyless", poolKey: "hackclub", tos: "caution" },
   { provider: "huggingchat", modelId: "baidu/ERNIE-4.5-VL-424B-A47B-Base-PT", displayName: "ERNIE 4.5 VL 424B A47B Base PT", monthlyTokens: 500000, creditTokens: 0, freeType: "recurring-monthly", poolKey: "huggingchat", tos: "caution" },
   { provider: "huggingchat", modelId: "CohereLabs/c4ai-command-r7b-12-2024", displayName: "Command R7B 12-2024", monthlyTokens: 500000, creditTokens: 0, freeType: "recurring-monthly", poolKey: "huggingchat", tos: "caution" },
   { provider: "huggingchat", modelId: "CohereLabs/command-a-reasoning-08-2025", displayName: "Command A Reasoning 08-2025", monthlyTokens: 500000, creditTokens: 0, freeType: "recurring-monthly", poolKey: "huggingchat", tos: "caution" },
@@ -321,6 +318,7 @@ export const FREE_MODEL_BUDGETS: FreeModelBudget[] = [
   { provider: "opencode-zen", modelId: "opencode/north-mini-code-free", displayName: "North Mini Code (free)", monthlyTokens: 0, creditTokens: 0, freeType: "recurring-uncapped", poolKey: "opencode-zen-free", tos: "caution" },
   { provider: "opencode-zen", modelId: "opencode/nemotron-3-ultra-free", displayName: "Nemotron 3 Ultra (free)", monthlyTokens: 0, creditTokens: 0, freeType: "recurring-uncapped", poolKey: "opencode-zen-free", tos: "caution" },
   { provider: "openrouter", modelId: "auto", displayName: "Auto (Best Available)", monthlyTokens: 1200000, creditTokens: 0, freeType: "recurring-daily", poolKey: "openrouter-free", tos: "caution" },
+  { provider: "openrouter", modelId: "stealth/ox-alpha", displayName: "Stealth Ox Alpha (free)", monthlyTokens: 0, creditTokens: 0, freeType: "recurring-daily", poolKey: "openrouter-free", tos: "caution" },
   { provider: "pollinations", modelId: "openai", displayName: "OpenAI (Pollinations)", monthlyTokens: 0, creditTokens: 0, freeType: "keyless", poolKey: "pollinations", tos: "caution" },
   { provider: "pollinations", modelId: "openai-fast", displayName: "OpenAI Fast (Pollinations)", monthlyTokens: 0, creditTokens: 0, freeType: "keyless", poolKey: "pollinations", tos: "caution" },
   { provider: "pollinations", modelId: "openai-large", displayName: "OpenAI Large (Pollinations)", monthlyTokens: 0, creditTokens: 0, freeType: "keyless", poolKey: "pollinations", tos: "caution" },

@@ -7,6 +7,8 @@ import { getProviderRegistry } from "./providerRegistryAccessor";
 import type { ConnectionFields } from "@/lib/db/encryption";
 import { NOAUTH_PROVIDERS } from "@/shared/constants/providers";
 import { hasUsableWebSessionCredential } from "@/shared/providers/webSessionCredentials";
+import { toNumber } from "@/shared/utils/numeric";
+import { isCompatibleProviderConnectionId } from "@/shared/utils/compatibleProviderId";
 import { defaultLogger as log } from "@omniroute/open-sse/utils/logger";
 import { getTokenLimit } from "../contextManager";
 import {
@@ -179,9 +181,31 @@ function hasProviderSpecificSessionData(conn: VirtualFactoryConn): boolean {
   return hasUsableWebSessionCredential(conn.provider, conn.providerSpecificData);
 }
 
+/**
+ * #11180: a custom compatible connection (`openai-compatible-*` /
+ * `anthropic-compatible-*`) may legitimately carry no credential at all,
+ * because it points at a self-hosted backend the operator started without one
+ * (`llama-server --host 0.0.0.0` with no `--api-key`, Ollama, vLLM). For those
+ * IDs "no credential" is the normal configuration rather than an unconfigured
+ * connection, so the credential gate must not silently drop them from every
+ * `auto/*` pool while direct `<provider>/<model>` calls keep working.
+ *
+ * Deliberately narrow: only the four generated compatible-provider ID shapes
+ * qualify. A first-party provider with an empty key really is unconfigured and
+ * stays filtered out, and the no-auth registry allowlist below is untouched.
+ */
+function isKeylessEligibleConnection(conn: VirtualFactoryConn): boolean {
+  return isCompatibleProviderConnectionId(conn.provider);
+}
+
 function hasUsableConnectionCredential(conn: VirtualFactoryConn): boolean {
   const hasApiKey = typeof conn.apiKey === "string" && conn.apiKey.trim().length > 0;
-  return hasApiKey || hasUsableOAuthToken(conn) || hasProviderSpecificSessionData(conn);
+  return (
+    hasApiKey ||
+    hasUsableOAuthToken(conn) ||
+    hasProviderSpecificSessionData(conn) ||
+    isKeylessEligibleConnection(conn)
+  );
 }
 
 const SYNTHETIC_NOAUTH_CONNECTION_ID = RESILIENCE_NOAUTH_CONNECTION_ID;
@@ -380,7 +404,9 @@ export function computeAdvertisedLimits(candidates: AdvertisedLimitCandidate[]):
   return { contextLength, maxOutputTokens };
 }
 
-const PREPARED_CAPABILITY_YIELD_INTERVAL = 16;
+// Catalog-scale pools can contain hundreds of models. Keep both candidate construction
+// and capability preparation cooperative instead of monopolising one event-loop turn.
+const VIRTUAL_AUTO_PREPARATION_YIELD_INTERVAL = 4;
 
 type PreparedCapabilityValues = {
   resolvedContextLength: number | null;
@@ -444,7 +470,7 @@ async function attachPreparedCapabilityValues(
       };
       byModel.set(candidate.model, values);
       state.resolvedSinceYield++;
-      if (state.resolvedSinceYield >= PREPARED_CAPABILITY_YIELD_INTERVAL) {
+      if (state.resolvedSinceYield >= VIRTUAL_AUTO_PREPARATION_YIELD_INTERVAL) {
         state.resolvedSinceYield = 0;
         await yieldVirtualAutoPreparationTurn();
       }
@@ -455,7 +481,10 @@ async function attachPreparedCapabilityValues(
 }
 
 export async function prepareVirtualAutoComboInputs(
-  options: { includeResolvedCapabilities?: boolean } = {}
+  options: {
+    includeResolvedCapabilities?: boolean;
+    resolutionSnapshot?: ModelCapabilityResolutionSnapshot;
+  } = {}
 ): Promise<PreparedVirtualAutoComboInputs> {
   const [connections, disabledNoAuthConnections, settings] = await Promise.all([
     getCachedProviderConnections({ isActive: true }) as Promise<VirtualFactoryConn[]>,
@@ -500,6 +529,7 @@ export async function prepareVirtualAutoComboInputs(
   // Build one logical candidate per provider/model and keep account fallback as an
   // allowlist on that candidate. This avoids both the old "first registry model per
   // connection" blind spot and a connections × models Cartesian candidate pool.
+  let candidateModelsSinceYield = 0;
   for (const [providerId, providerConnections] of connectionsByProvider) {
     const providerInfo = registry[providerId];
     const registryModelIds = Array.isArray(providerInfo?.models)
@@ -533,6 +563,11 @@ export async function prepareVirtualAutoComboInputs(
       : Array.from(new Set([...registryModelIds, ...defaultModelIds]));
 
     for (const modelId of modelIds) {
+      candidateModelsSinceYield++;
+      if (candidateModelsSinceYield >= VIRTUAL_AUTO_PREPARATION_YIELD_INTERVAL) {
+        candidateModelsSinceYield = 0;
+        await yieldVirtualAutoPreparationTurn();
+      }
       if (hiddenModels?.has(modelId)) continue;
 
       const allowedConnectionIds = providerConnections
@@ -607,7 +642,7 @@ export async function prepareVirtualAutoComboInputs(
       // remaining allowance as a percentage, and a raw ">0" comparison would
       // let a reading of e.g. 0.3% (rounding noise, not real headroom) pass.
       minRemainingAllowance: 1,
-      maxStateAgeMs: (settings.autoRefreshProviderQuotaInterval ?? 180) * 1000,
+      maxStateAgeMs: toNumber(settings.autoRefreshProviderQuotaInterval, 180) * 1000,
     });
     if (strictFilteredPool !== pool) pool = strictFilteredPool;
 
@@ -631,7 +666,7 @@ export async function prepareVirtualAutoComboInputs(
   const capabilityState: PreparedCapabilityState = {
     byTarget: new Map(),
     resolvedSinceYield: 0,
-    resolutionSnapshot: createModelCapabilityResolutionSnapshot(),
+    resolutionSnapshot: options.resolutionSnapshot ?? createModelCapabilityResolutionSnapshot(),
   };
   return {
     regularCandidates: await attachPreparedCapabilityValues(regularCandidates, capabilityState),
